@@ -1,11 +1,37 @@
 from kubernetes import client
+from datetime import datetime, timezone
 
 from cluster.client import apps_v1
 from config.settings import DEFAULT_NAMESPACE
 
 from cluster.client import apps_v1
 from config.settings import DEFAULT_NAMESPACE
+def restart_deployment(
+    deployment_name: str,
+    namespace: str = DEFAULT_NAMESPACE,
+) -> str:
+    restarted_at = datetime.now(timezone.utc).isoformat()
 
+    apps_v1.patch_namespaced_deployment(
+        name=deployment_name,
+        namespace=namespace,
+        body={
+            "spec": {
+                "template": {
+                    "metadata": {
+                        "annotations": {
+                            "kubectl.kubernetes.io/restartedAt": restarted_at
+                        }
+                    }
+                }
+            }
+        },
+    )
+
+    return (
+        f"Restart started for deployment '{deployment_name}' "
+        f"in namespace '{namespace}'."
+    )
 
 def update_deployment_image(
     deployment_name: str,
