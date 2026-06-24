@@ -1,6 +1,8 @@
 from langchain.agents import create_agent
 from langchain_core.tools import tool
 from langchain_ollama import ChatOllama
+from tools.event_tools import get_pod_events
+from workflows.pod_troubleshooter import troubleshoot_pod
 
 from config.settings import DEFAULT_NAMESPACE, OLLAMA_MODEL
 from tools.deployment_tools import list_deployments, scale_deployment
@@ -40,6 +42,25 @@ def kubernetes_scale_deployment(
     """Scale a deployment only when the user explicitly asks."""
     return scale_deployment(deployment_name, replicas, namespace)
 
+@tool
+def kubernetes_get_pod_events(
+    pod_name: str,
+    namespace: str = DEFAULT_NAMESPACE,
+) -> list[dict]:
+    """Get Kubernetes events for one pod."""
+    return get_pod_events(pod_name, namespace)
+
+
+@tool
+def kubernetes_troubleshoot_pod(
+    pod_name: str,
+    namespace: str = DEFAULT_NAMESPACE,
+) -> dict:
+    """
+    Inspect a pod, its Kubernetes events, and its logs.
+    Use this when a user asks why a specific pod is failing.
+    """
+    return troubleshoot_pod(pod_name, namespace)    
 
 def build_agent():
     llm = ChatOllama(
@@ -54,6 +75,8 @@ def build_agent():
             kubernetes_get_pod_logs,
             kubernetes_list_deployments,
             kubernetes_scale_deployment,
+            kubernetes_get_pod_events,
+            kubernetes_troubleshoot_pod 
         ],
         system_prompt=(
             f"You are a Kubernetes AI agent. "
@@ -61,5 +84,7 @@ def build_agent():
             "Use tools to inspect Kubernetes before answering. "
             "Do not invent pod names or status. "
             "Only scale when the user explicitly requests it."
+            "For a failing pod, use kubernetes_troubleshoot_pod before explaining the cause. "
+            "Do not create, delete, restart, or modify resources unless the user explicitly asks."
         ),
     )
