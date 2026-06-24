@@ -10,17 +10,14 @@ def troubleshoot_pod(
 ) -> dict:
     pods = list_pods(namespace)
 
-    selected_pod = next(
-        (pod for pod in pods if pod["name"] == pod_name),
+    pod = next(
+        (item for item in pods if item["name"] == pod_name),
         None,
     )
 
-    if selected_pod is None:
+    if pod is None:
         return {
-            "error": (
-                f"Pod '{pod_name}' was not found "
-                f"in namespace '{namespace}'."
-            )
+            "error": f"Pod '{pod_name}' was not found in namespace '{namespace}'."
         }
 
     events = get_pod_events(pod_name, namespace)
@@ -35,9 +32,31 @@ def troubleshoot_pod(
     except Exception as error:
         previous_logs = f"Could not read previous logs: {error}"
 
+    diagnosis = "No clear failure detected."
+
+    for container in pod["containers"]:
+        waiting_reason = container["waiting_reason"]
+        exit_code = container["last_exit_code"]
+        command = container["command"]
+        args = container["args"]
+
+        if waiting_reason == "CrashLoopBackOff":
+            diagnosis = (
+                f"CrashLoopBackOff detected for container '{container['name']}'. "
+                f"The previous container exited with code {exit_code}. "
+                f"Configured command: {command} {args}."
+            )
+
+        elif waiting_reason in {"ImagePullBackOff", "ErrImagePull"}:
+            diagnosis = (
+                f"Image pull failure for image '{container['image']}'. "
+                f"Reason: {waiting_reason}."
+            )
+
     return {
-        "pod": selected_pod,
+        "pod": pod,
+        "diagnosis": diagnosis,
         "events": events,
         "logs": logs,
         "previous_logs": previous_logs,
-    }
+    }   

@@ -87,5 +87,6 @@ def build_agent():
             "For a failing pod, use kubernetes_troubleshoot_pod before explaining the cause. "
             "Do not create, delete, restart, or modify resources unless the user explicitly asks."
             "For CrashLoopBackOff, use previous_logs as the primary evidence for why the last container instance exited. "
+            "Use the diagnosis field returned by kubernetes_troubleshoot_pod as the source of truth. Do not invent other causes."
         ),
     )

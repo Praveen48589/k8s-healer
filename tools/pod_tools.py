@@ -10,27 +10,40 @@ def list_pods(namespace: str = DEFAULT_NAMESPACE) -> list[dict]:
     for pod in pods.items:
         statuses = pod.status.container_statuses or []
 
-        restarts = sum(item.restart_count for item in statuses)
+        containers = []
 
-        waiting_reasons = [
-            item.state.waiting.reason
-            for item in statuses
-            if item.state.waiting and item.state.waiting.reason
-        ]
+        for index, container in enumerate(pod.spec.containers):
+            status = statuses[index] if index < len(statuses) else None
 
-        terminated_reasons = [
-            item.state.terminated.reason
-            for item in statuses
-            if item.state.terminated and item.state.terminated.reason
-        ]
+            waiting_reason = None
+            last_exit_code = None
+            last_terminated_reason = None
+
+            if status and status.state.waiting:
+                waiting_reason = status.state.waiting.reason
+
+            if status and status.last_state.terminated:
+                last_exit_code = status.last_state.terminated.exit_code
+                last_terminated_reason = status.last_state.terminated.reason
+
+            containers.append(
+                {
+                    "name": container.name,
+                    "image": container.image,
+                    "command": container.command or [],
+                    "args": container.args or [],
+                    "waiting_reason": waiting_reason,
+                    "last_exit_code": last_exit_code,
+                    "last_terminated_reason": last_terminated_reason,
+                    "restarts": status.restart_count if status else 0,
+                }
+            )
 
         result.append(
             {
                 "name": pod.metadata.name,
                 "phase": pod.status.phase,
-                "restarts": restarts,
-                "waiting_reasons": waiting_reasons,
-                "terminated_reasons": terminated_reasons,
+                "containers": containers,
             }
         )
 
