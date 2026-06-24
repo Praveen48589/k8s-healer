@@ -11,3 +11,15 @@ def get_pod_logs(
         namespace=namespace,
         tail_lines=100,
     )
+
+
+def get_previous_pod_logs(
+    pod_name: str,
+    namespace: str = DEFAULT_NAMESPACE,
+) -> str:
+    return core_v1.read_namespaced_pod_log(
+        name=pod_name,
+        namespace=namespace,
+        previous=True,
+        tail_lines=100,
+    )

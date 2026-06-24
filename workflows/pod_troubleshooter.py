@@ -1,6 +1,6 @@
 from config.settings import DEFAULT_NAMESPACE
 from tools.event_tools import get_pod_events
-from tools.log_tools import get_pod_logs
+from tools.log_tools import get_pod_logs, get_previous_pod_logs
 from tools.pod_tools import list_pods
 
 
@@ -28,10 +28,16 @@ def troubleshoot_pod(
     try:
         logs = get_pod_logs(pod_name, namespace)
     except Exception as error:
-        logs = f"Could not read logs: {error}"
+        logs = f"Could not read current logs: {error}"
+
+    try:
+        previous_logs = get_previous_pod_logs(pod_name, namespace)
+    except Exception as error:
+        previous_logs = f"Could not read previous logs: {error}"
 
     return {
         "pod": selected_pod,
         "events": events,
         "logs": logs,
+        "previous_logs": previous_logs,
     }
