@@ -3,19 +3,34 @@ from kubernetes import client
 from cluster.client import apps_v1
 from config.settings import DEFAULT_NAMESPACE
 
+from cluster.client import apps_v1
+from config.settings import DEFAULT_NAMESPACE
+
 
 def update_deployment_image(
     deployment_name: str,
     image: str,
     namespace: str = DEFAULT_NAMESPACE,
 ) -> str:
+    deployment = apps_v1.read_namespaced_deployment(
+        name=deployment_name,
+        namespace=namespace,
+    )
+
+    containers = deployment.spec.template.spec.containers
+
+    if not containers:
+        return f"Deployment '{deployment_name}' has no containers."
+
+    container_name = containers[0].name
+
     patch_body = {
         "spec": {
             "template": {
                 "spec": {
                     "containers": [
                         {
-                            "name": deployment_name,
+                            "name": container_name,
                             "image": image,
                         }
                     ]
@@ -31,10 +46,9 @@ def update_deployment_image(
     )
 
     return (
-        f"Updated deployment '{deployment_name}' "
-        f"to image '{image}' in namespace '{namespace}'."
+        f"Updated container '{container_name}' in deployment "
+        f"'{deployment_name}' to image '{image}'."
     )
-
 
 def get_deployment_status(
     deployment_name: str,
