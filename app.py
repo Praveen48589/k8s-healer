@@ -1,11 +1,13 @@
 from agent.agent import build_agent
 from config.settings import DEFAULT_NAMESPACE
+from tools.deployment_tools import scale_deployment
 from tools.remediation_tools import (
     get_deployment_status,
     update_deployment_image,
 )
 
 pending_image_update = None
+pending_scale = None
 
 
 def print_agent_response(result):
@@ -19,10 +21,7 @@ def parse_fix_request(text: str):
 
     lower = text.lower()
 
-    if not lower.startswith(prefix):
-        return None
-
-    if marker not in lower:
+    if not lower.startswith(prefix) or marker not in lower:
         return None
 
     marker_index = lower.index(marker)
@@ -40,8 +39,47 @@ def parse_fix_request(text: str):
     }
 
 
+def parse_scale_request(text: str):
+    """
+    Supports:
+    Scale deployment test-nginx to 3 replicas
+    """
+    parts = text.strip().split()
+
+    if len(parts) != 6:
+        return None
+
+    if parts[0].lower() != "scale":
+        return None
+
+    if parts[1].lower() != "deployment":
+        return None
+
+    if parts[3].lower() != "to":
+        return None
+
+    if parts[5].lower() not in {"replica", "replicas"}:
+        return None
+
+    deployment_name = parts[2]
+
+    try:
+        replicas = int(parts[4])
+    except ValueError:
+        return None
+
+    if replicas < 0:
+        return None
+
+    return {
+        "deployment_name": deployment_name,
+        "replicas": replicas,
+        "namespace": DEFAULT_NAMESPACE,
+    }
+
+
 def main():
-    global pending_image_update
+    global pending_image_update, pending_scale
 
     agent = build_agent()
 
@@ -61,33 +99,67 @@ def main():
             continue
 
         if query.upper() == "CONFIRM":
-            if pending_image_update is None:
-                print("\nNo pending change to confirm.")
-                continue
-
-            change = pending_image_update
-
             try:
-                message = update_deployment_image(
-                    deployment_name=change["deployment_name"],
-                    image=change["image"],
-                    namespace=change["namespace"],
-                )
+                if pending_image_update is not None:
+                    change = pending_image_update
 
-                print(f"\nApplied: {message}")
+                    message = update_deployment_image(
+                        deployment_name=change["deployment_name"],
+                        image=change["image"],
+                        namespace=change["namespace"],
+                    )
 
-                status = get_deployment_status(
-                    deployment_name=change["deployment_name"],
-                    namespace=change["namespace"],
-                )
+                    print(f"\nApplied: {message}")
 
-                print(f"Verification: {status}")
+                    status = get_deployment_status(
+                        deployment_name=change["deployment_name"],
+                        namespace=change["namespace"],
+                    )
 
-                pending_image_update = None
+                    print(f"Verification: {status}")
+
+                    pending_image_update = None
+                    continue
+
+                if pending_scale is not None:
+                    change = pending_scale
+
+                    message = scale_deployment(
+                        deployment_name=change["deployment_name"],
+                        replicas=change["replicas"],
+                        namespace=change["namespace"],
+                    )
+
+                    print(f"\nApplied: {message}")
+
+                    status = get_deployment_status(
+                        deployment_name=change["deployment_name"],
+                        namespace=change["namespace"],
+                    )
+
+                    print(f"Verification: {status}")
+
+                    pending_scale = None
+                    continue
+
+                print("\nNo pending change to confirm.")
 
             except Exception as error:
                 print(f"\nFailed to apply change: {error}")
 
+            continue
+
+        scale_change = parse_scale_request(query)
+
+        if scale_change:
+            pending_scale = scale_change
+
+            print("\nProposed scale:")
+            print(f"Deployment: {scale_change['deployment_name']}")
+            print(f"Namespace: {scale_change['namespace']}")
+            print(f"Replicas: {scale_change['replicas']}")
+            print("\nNo change has been made.")
+            print("Type exactly CONFIRM to apply this scale.")
             continue
 
         proposed_change = parse_fix_request(query)
@@ -95,12 +167,12 @@ def main():
         if proposed_change:
             pending_image_update = proposed_change
 
-            print("\nProposed change:")
+            print("\nProposed image update:")
             print(f"Deployment: {proposed_change['deployment_name']}")
             print(f"Namespace: {proposed_change['namespace']}")
             print(f"New image: {proposed_change['image']}")
             print("\nNo change has been made.")
-            print("Type exactly CONFIRM to apply this change.")
+            print("Type exactly CONFIRM to apply this image update.")
             continue
 
         try:
