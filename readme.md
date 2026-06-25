@@ -1,305 +1,440 @@
 # K8s-Healer
 
-K8s-Healer is a Python-based Kubernetes AI troubleshooting and safe remediation agent.
+<p align="center">
+  <img src="https://img.shields.io/badge/Python-3.10%2B-3776AB?style=for-the-badge&logo=python&logoColor=white" alt="Python" />
+  <img src="https://img.shields.io/badge/Kubernetes-326CE5?style=for-the-badge&logo=kubernetes&logoColor=white" alt="Kubernetes" />
+  <img src="https://img.shields.io/badge/Ollama-000000?style=for-the-badge&logo=ollama&logoColor=white" alt="Ollama" />
+  <img src="https://img.shields.io/badge/LangChain-1C3C3C?style=for-the-badge&logo=langchain&logoColor=white" alt="LangChain" />
+  <img src="https://img.shields.io/badge/Kind-326CE5?style=for-the-badge&logo=kubernetes&logoColor=white" alt="Kind" />
+</p>
 
-It connects to a Kubernetes cluster, checks workloads in the `agent` namespace, diagnoses common pod failures, and performs approved remediation actions only after explicit confirmation.
+<p align="center">
+  <b>A Python-based Kubernetes troubleshooting and safe remediation agent powered by a local LLM.</b>
+</p>
 
-## Features
+---
+
+## Overview
+
+K8s-Healer helps diagnose common Kubernetes workload failures and safely perform selected remediation actions.
+
+It uses a local Ollama model to explain Kubernetes issues, while Python code collects deterministic cluster data such as pod events, logs, container status, restart counts, and exit codes.
+
+For safety, Kubernetes write operations are not directly controlled by the LLM. The application first proposes a change, waits for explicit confirmation, then applies and verifies the change.
+
+---
+
+## Key Features
 
 ### Troubleshooting
 
-The agent can:
+* List pods and deployments in the configured namespace
+* Read pod logs and previous container logs
+* Read Kubernetes events
+* Inspect pod phase, restart counts, waiting reasons, and exit codes
+* Diagnose common failures:
 
-- List pods and deployments
-- Read pod logs
-- Read previous container logs
-- Read Kubernetes events
-- Inspect container restart counts
-- Inspect waiting reasons and exit codes
-- Diagnose `ErrImagePull`
-- Diagnose `ImagePullBackOff`
-- Diagnose `CrashLoopBackOff`
-- Suggest likely fixes
+  * `ErrImagePull`
+  * `ImagePullBackOff`
+  * `CrashLoopBackOff`
+  * Invalid image tags
+  * Container startup failures
 
-### Safe remediation
+### Safe Remediation
 
-The agent currently supports:
+* Update a deployment image
+* Scale a deployment
+* Require explicit confirmation before any change
+* Verify deployment status after a change
 
-- Updating a deployment image
-- Scaling a deployment
-
-Write actions follow this workflow:
+### Safety Workflow
 
 ```text
 User request
     ↓
-Python shows the proposed change
+Application proposes the Kubernetes change
     ↓
-User types CONFIRM
+User reviews and types CONFIRM
     ↓
-Python applies the change
+Python applies the exact stored change
     ↓
-Python verifies deployment status
+Application checks deployment status
+```
 
-The LLM helps with troubleshooting. Python controls Kubernetes write operations.
+---
 
-Tech Stack
-Python
-LangChain
-Ollama
-Qwen 2.5 1.5B
-Kubernetes Python Client
-Kubernetes / Kind
-Project Structure
+## Architecture
+
+```text
+User
+  │
+  ▼
+CLI Application (app.py)
+  │
+  ├── Read-only requests ──► LangChain + Ollama
+  │                              │
+  │                              ▼
+  │                        Kubernetes tools
+  │                        - Pods
+  │                        - Logs
+  │                        - Events
+  │                        - Deployments
+  │
+  └── Write requests ─────► Python confirmation workflow
+                                 │
+                                 ▼
+                           Kubernetes Python Client
+```
+
+---
+
+## Tech Stack
+
+| Technology               | Purpose                              |
+| ------------------------ | ------------------------------------ |
+| Python                   | Main application language            |
+| Kubernetes Python Client | Kubernetes API communication         |
+| LangChain                | Agent and tool orchestration         |
+| Ollama                   | Local LLM runtime                    |
+| Qwen 2.5 1.5B            | Local model used by the agent        |
+| Kind                     | Local Kubernetes cluster for testing |
+| Linux                    | Development and runtime environment  |
+
+---
+
+## Project Structure
+
+```text
 k8s-healer/
 ├── agent/
-│   └── agent.py
+│   └── agent.py                 # LangChain agent configuration
 ├── cluster/
-│   └── client.py
+│   └── client.py                # Kubernetes API client setup
 ├── config/
-│   └── settings.py
+│   └── settings.py              # Namespace and model configuration
 ├── tools/
-│   ├── deployment_tools.py
-│   ├── event_tools.py
-│   ├── log_tools.py
-│   ├── pod_tools.py
-│   └── remediation_tools.py
+│   ├── deployment_tools.py      # Deployment operations
+│   ├── event_tools.py           # Pod event collection
+│   ├── log_tools.py             # Current and previous pod logs
+│   ├── pod_tools.py             # Pod inspection
+│   └── remediation_tools.py     # Image update and verification
 ├── workflows/
-│   └── pod_troubleshooter.py
-├── app.py
+│   └── pod_troubleshooter.py    # Pod troubleshooting workflow
+├── app.py                       # CLI entry point
 ├── requirements.txt
 └── README.md
-Prerequisites
+```
+
+---
+
+## Prerequisites
 
 Install the following on Linux:
 
-Python 3.10 or newer
-kubectl
-A Kubernetes cluster such as Kind, Minikube, EKS, or Kubernetes on EC2
-Ollama
+* Python 3.10 or later
+* `kubectl`
+* Ollama
+* A Kubernetes cluster, such as Kind, Minikube, EKS, or a self-managed cluster
 
 Check Python:
 
+```bash
 python3 --version
+```
 
 Check Kubernetes access:
 
+```bash
 kubectl get nodes
-
-Create the required namespace if it does not exist:
-
-kubectl create namespace agent
+```
 
 Check Ollama:
 
+```bash
 ollama --version
+```
 
-Pull the model:
+---
 
-ollama pull qwen2.5:1.5b
+## Installation
 
-Verify the model:
+### 1. Clone the repository
 
-ollama list
-Installation
-
-Clone the repository:
-
+```bash
 git clone <YOUR_GITHUB_REPOSITORY_URL>
 cd k8s-healer
+```
 
-Create a virtual environment:
+### 2. Create a virtual environment
 
+```bash
 python3 -m venv venv
-
-Activate it:
-
 source venv/bin/activate
+```
 
-Install dependencies:
+### 3. Install dependencies
 
+```bash
 python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
-Configuration
+```
 
-Create the environment file:
+### 4. Pull the local model
 
+```bash
+ollama pull qwen2.5:1.5b
+```
+
+Verify:
+
+```bash
+ollama list
+```
+
+---
+
+## Kubernetes Setup
+
+This project uses the `agent` namespace.
+
+Create it if it does not already exist:
+
+```bash
+kubectl create namespace agent
+```
+
+Verify:
+
+```bash
+kubectl get namespaces
+```
+
+---
+
+## Configuration
+
+Create a `.env` file in the project root:
+
+```bash
 touch .env
 nano .env
+```
 
 Add:
 
+```env
 K8S_NAMESPACE=agent
 OLLAMA_MODEL=qwen2.5:1.5b
+```
 
-Save the file with:
+Save in Nano:
 
+```text
 Ctrl + O
 Enter
 Ctrl + X
-Run the Agent
+```
+
+---
+
+## Run the Agent
 
 Activate the virtual environment:
 
+```bash
 source venv/bin/activate
+```
 
-Start the agent:
+Start the application:
 
+```bash
 python app.py
+```
 
 Expected output:
 
+```text
 Kubernetes AI Agent started
 Namespace: agent
 Model: qwen2.5:1.5b
 Type exit to quit
+```
 
-Exit the agent:
+To stop the application:
 
+```text
 exit
-Usage
-List Pods
-List all pods
-List Deployments
-Show deployments
-Diagnose a Failing Pod
+```
 
-First get the pod name:
+---
 
+## Usage Examples
+
+### Diagnose a Pod
+
+First, find the pod name:
+
+```bash
 kubectl get pods -n agent
+```
 
-Then ask the agent:
+Then ask:
 
+```text
 Use kubernetes_troubleshoot_pod with pod_name "POD_NAME" and explain the root cause.
+```
 
-Example:
+---
 
-Use kubernetes_troubleshoot_pod with pod_name "broken-image-586f9bd7bf-abcde" and explain the root cause.
-Fix a Deployment Image
+### Fix an Invalid Image
+
+```text
 Fix deployment broken-image by changing its image to nginx:latest
+```
 
-The application shows a proposed change.
+The application will display a proposal similar to:
+
+```text
+Proposed image update:
+Deployment: broken-image
+Namespace: agent
+New image: nginx:latest
+
+No change has been made.
+Type exactly CONFIRM to apply this image update.
+```
 
 Apply it:
 
+```text
 CONFIRM
-Scale a Deployment
+```
+
+---
+
+### Scale a Deployment
+
+```text
 Scale deployment test-nginx to 3 replicas
+```
 
-The application shows a proposed scale operation.
+The application will display a proposed scale operation.
 
 Apply it:
 
+```text
 CONFIRM
-Verify Kubernetes Changes
+```
 
-Check pods:
+Verify:
 
-kubectl get pods -n agent
-
-Watch pods while Kubernetes creates or replaces them:
-
-kubectl get pods -n agent -w
-
-Check deployments:
-
+```bash
 kubectl get deployments -n agent
+kubectl get pods -n agent
+```
 
-Describe a deployment:
+---
 
-kubectl describe deployment DEPLOYMENT_NAME -n agent
-Testing
-Test ImagePullBackOff
+## Testing
 
-Create a deployment with an invalid image tag:
+### Test `ImagePullBackOff`
 
+Create a deployment with a non-existent image tag:
+
+```bash
 kubectl create deployment broken-image \
   --image=nginx:this-tag-does-not-exist \
   -n agent
+```
 
-Check the pod:
+Check the pod status:
 
+```bash
 kubectl get pods -n agent
+```
 
-Expected status:
+Then diagnose it through the agent.
 
-ImagePullBackOff
+Fix it with:
 
-Get the exact pod name, then ask:
-
-Use kubernetes_troubleshoot_pod with pod_name "BROKEN_POD_NAME" and explain the root cause.
-
-Fix it:
-
+```text
 Fix deployment broken-image by changing its image to nginx:latest
+```
 
-Then approve:
+Then confirm:
 
+```text
 CONFIRM
-Test CrashLoopBackOff
+```
 
-Create a deployment that exits with code 1:
+---
 
+### Test `CrashLoopBackOff`
+
+Create a deployment that exits immediately:
+
+```bash
 kubectl create deployment crash-app \
   --image=busybox \
   -n agent \
   -- sh -c "exit 1"
+```
 
 Check the pod:
 
+```bash
 kubectl get pods -n agent
+```
 
-Expected status:
+Diagnose it:
 
-CrashLoopBackOff
-
-Get the exact pod name, then ask:
-
+```text
 Use kubernetes_troubleshoot_pod with pod_name "CRASH_POD_NAME" and explain the root cause.
-Cleanup
+```
 
-Delete test deployments:
+---
 
+## Cleanup
+
+Remove test deployments:
+
+```bash
 kubectl delete deployment broken-image crash-app -n agent --ignore-not-found
+```
 
 Check remaining pods:
 
+```bash
 kubectl get pods -n agent
-Safety Design
+```
 
-K8s-Healer separates AI reasoning from Kubernetes modifications.
+---
 
-The LLM can:
+## Current Limitations
 
-Inspect cluster state
-Read logs and events
-Explain failures
-Suggest fixes
+* Works with one configured namespace: `agent`
+* Confirmation state exists only while the application is running
+* Uses a small local model, so explanations can occasionally be generic
+* Current write actions are limited to image updates and scaling
+* No persistent audit log yet
 
-Python applies write actions only after the user enters:
+---
 
-CONFIRM
+## Future Improvements
 
-This prevents unapproved scaling or image changes.
+* Deployment restart with confirmation
+* Deployment rollback with confirmation
+* Rollout monitoring and timeout detection
+* Persistent audit logs
+* Prometheus and Grafana integration
+* Slack notifications
+* Web dashboard
+* Multi-namespace support
+* RBAC and production approval workflows
 
-Current Limitations
-Works with one configured namespace: agent
-Confirmation state is stored only while app.py is running
-Uses the local qwen2.5:1.5b model
-Supports image updates and scaling only
-No persistent audit log yet
-Future Improvements
-Restart deployment with confirmation
-Rollback deployment
-Automatic rollout monitoring
-Audit logging
-Prometheus integration
-Grafana alerts
-Slack notifications
-Web dashboard
-Multi-namespace support
-RBAC and production approval workflows
-Author
+---
 
-Praveen Singh Tomar
+## Author
+
+**Praveen Singh Tomar**
 Aspiring DevOps and Cloud Engineer
